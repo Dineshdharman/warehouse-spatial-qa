@@ -44,11 +44,13 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
         self.n_items           = n_items
         self._task_id          = None
         self._scene            = None
+        self._initial_description = None  # frozen — shown to LLM throughout episode
+        self._move_history     = []       # list of human-readable move strings
         self._step             = 0
         self._done             = False
         self._current_expected = None
         self._step_rewards     = []
-        self._pending_move     = None   # stores move metadata for _apply_move()
+        self._pending_move     = None
 
     # ── Core sync API (openenv-core abstract method implementation) ───────────
 
@@ -65,6 +67,8 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
 
         self._task_id      = task_id
         self._scene        = generate_scene(self.n_items)
+        self._initial_description = self._scene["description"]  # frozen for this episode
+        self._move_history = []
         self._step         = 0
         self._done         = False
         self._step_rewards = []
@@ -151,8 +155,21 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
             self._pending_move     = meta   # saved so step() can apply the move
             hint = "Answer with the item ID that must be relocated, or 'none'."
 
+        # For movement_prediction: show the ORIGINAL layout + move history so the
+        # LLM must mentally track cumulative positions (not just read updated coords).
+        if self._task_id == "movement_prediction" and self._initial_description:
+            history_block = ""
+            if self._move_history:
+                history_block = (
+                    "\n\nMoves applied so far (update your mental model):\n"
+                    + "\n".join(f"  {m}" for m in self._move_history)
+                )
+            scene_desc = self._initial_description + history_block
+        else:
+            scene_desc = self._scene["description"]
+
         return SpatialObservation(
-            scene_description=self._scene["description"],
+            scene_description=scene_desc,
             question=q,
             task_id=self._task_id or "",
             step_num=self._step,
@@ -161,12 +178,13 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
 
     def _apply_move(self, move_meta: dict) -> None:
         """
-        Apply a movement event to self._scene so subsequent steps see updated positions.
+        Apply a movement event to self._scene so subsequent grading is correct,
+        and append a human-readable entry to self._move_history.
 
-        The mover is placed at the target slot. If a conflict item occupied that slot,
-        it is relocated to the mover's old slot (a natural swap). This forces the LLM
-        to track cumulative state changes across the 5 steps rather than doing
-        independent per-step lookups against a static scene description.
+        The LLM is NOT shown the updated scene description — it sees the original
+        layout plus the move history log, and must mentally track current positions.
+        The mover goes to the target slot; any conflict item swaps to the mover's
+        old slot (natural warehouse swap).
         """
         mover_id = move_meta["mover"]
         target_x = move_meta["target_x"]
@@ -176,7 +194,10 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
         if not mover:
             return
 
-        old_x, old_y = mover["x"], mover["y"]
+        old_x, old_y  = mover["x"], mover["y"]
+        old_loc       = mover["location"]
+        new_aisle     = AISLES[target_x]
+        new_loc       = f"Aisle {new_aisle}, Row {target_y}"
 
         # If a conflict item sits at the target, swap it to the mover's old slot
         conflict = next(
@@ -194,13 +215,23 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
             conflict["zone"]     = zone_for(old_aisle, old_y)
 
         # Place mover at target
-        new_aisle = AISLES[target_x]
         mover["x"]        = target_x
         mover["y"]        = target_y
         mover["aisle"]    = new_aisle
         mover["row"]      = target_y
-        mover["location"] = f"Aisle {new_aisle}, Row {target_y}"
+        mover["location"] = new_loc
         mover["zone"]     = zone_for(new_aisle, target_y)
 
-        # Regenerate scene description so LLM sees updated layout
+        # Regenerate internal description (used for grading; NOT shown to LLM)
         self._scene["description"] = describe_scene(self._scene["items"])
+
+        # Append human-readable log entry shown to LLM as move history
+        step_num = len(self._move_history) + 1
+        if conflict:
+            log = (
+                f"[Move {step_num}] Item {mover_id} moved: {old_loc} → {new_loc}. "
+                f"Item {conflict['id']} displaced to {old_loc}."
+            )
+        else:
+            log = f"[Move {step_num}] Item {mover_id} moved: {old_loc} → {new_loc} (slot was empty)."
+        self._move_history.append(log)
