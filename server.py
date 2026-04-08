@@ -144,6 +144,9 @@ async def run_stream(
     tasks = [t.strip() for t in task_ids.split(",") if t.strip()]
 
     async def generate():
+        if not HF_TOKEN:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'HF_TOKEN is not set. Go to HF Space Settings → Repository secrets and add HF_TOKEN.'})}\n\n"
+            return
         client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
         all_scores: dict = {t: [] for t in tasks}
 

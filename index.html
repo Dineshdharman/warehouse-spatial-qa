@@ -281,6 +281,14 @@ function startRun() {
       document.getElementById('progressBar').style.width = '100%';
       renderReport(ev.summary, ev.overall);
     }
+
+    else if (ev.type === 'error') {
+      runES.close(); runES = null;
+      document.getElementById('runBtn').disabled  = false;
+      document.getElementById('stopBtn').disabled = true;
+      document.getElementById('runStatus').textContent = 'Error';
+      appendLog(log, `⚠ ${ev.message}`, 'bad');
+    }
   };
 
   runES.onerror = () => {
