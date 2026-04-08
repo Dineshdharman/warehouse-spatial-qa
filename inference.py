@@ -77,19 +77,16 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 # ── LLM call ─────────────────────────────────────────────────────────────────
 
 def call_llm(client: OpenAI, messages: List[Dict]) -> str:
-    """Call the LLM with full conversation history. Returns the answer string."""
-    try:
-        completion = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-            stream=False,
-        )
-        return (completion.choices[0].message.content or "").strip()
-    except Exception as exc:
-        print(f"[DEBUG] LLM call failed: {exc}", flush=True)
-        return "none"
+    """Call the LLM with full conversation history. Returns the answer string.
+    Raises on API failure so callers can handle the error explicitly."""
+    completion = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+        stream=False,
+    )
+    return (completion.choices[0].message.content or "").strip()
 
 
 # ── RL episode runner ─────────────────────────────────────────────────────────
@@ -143,7 +140,19 @@ def run_task_rl(
             current_question = obs.question
 
             # ── LLM answers with full conversation history ──────────────────
-            answer = call_llm(client, messages)
+            try:
+                answer = call_llm(client, messages)
+            except Exception as exc:
+                api_error = f"LLM API error: {exc}"
+                print(f"[DEBUG] {api_error}", flush=True)
+                if verbose:
+                    log_step(step=step, action="", reward=0.0, done=True, error=api_error)
+                steps_data.append({
+                    "step": step, "question": current_question,
+                    "answer": "", "reward": 0.0,
+                    "feedback": api_error, "done": True,
+                })
+                break
             messages.append({"role": "assistant", "content": answer})
 
             # ── Step in environment ─────────────────────────────────────────
