@@ -248,6 +248,8 @@ def sample_hard(scene: dict, step_num: int = 1) -> tuple:
         "mover":         mover["id"],
         "from_loc":      _loc(mover),
         "to_loc":        target_loc,
+        "target_x":      target_aisle_idx,
+        "target_y":      target_row,
         "conflict_item": conflict["id"] if conflict else None,
     }
 

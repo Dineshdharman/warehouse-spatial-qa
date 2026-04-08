@@ -141,6 +141,16 @@ def get_item(scene: Dict, item_id: str) -> Dict:
     raise KeyError(f"Item '{item_id}' not found in scene.")
 
 
+def describe_scene(items: List[Dict]) -> str:
+    """Public wrapper — regenerate a WMS-style description from the current item list."""
+    return _describe(items)
+
+
+def zone_for(aisle: str, row: int) -> str:
+    """Public wrapper — return zone classification for a given aisle/row."""
+    return _zone_for(aisle, row)
+
+
 # ── Spatial helpers (used by question_bank and tests) ────────────────────────
 
 def is_west_of(a: Dict, b: Dict) -> bool:

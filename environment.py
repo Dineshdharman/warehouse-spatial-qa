@@ -9,7 +9,7 @@ import numpy as np
 from typing import Optional
 from openenv.core import Environment
 from models import SpatialObservation, SpatialAction, SpatialState
-from scene_generator import generate_scene
+from scene_generator import generate_scene, describe_scene, zone_for, AISLES
 from question_bank import sample_easy, sample_medium, sample_hard
 from grader import score as grade, generate_feedback
 
@@ -48,6 +48,7 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
         self._done             = False
         self._current_expected = None
         self._step_rewards     = []
+        self._pending_move     = None   # stores move metadata for _apply_move()
 
     # ── Core sync API (openenv-core abstract method implementation) ───────────
 
@@ -68,6 +69,7 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
         self._done         = False
         self._step_rewards = []
         self._current_expected = None
+        self._pending_move     = None
 
         obs        = self._make_observation()
         obs.done   = False
@@ -106,6 +108,9 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
             reward     = grade("movement_prediction", action.answer, expected)
             self._done = self._step >= MAX_STEPS["movement_prediction"]
             info       = {"correct_answer": expected}
+            # Apply the completed move so the next observation reflects updated positions
+            if self._pending_move:
+                self._apply_move(self._pending_move)
 
         self._step_rewards.append(reward)
 
@@ -141,8 +146,9 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
             self._current_expected = expected
             hint = "Answer both parts using the format: Part1=<zone>, Part2=<ID>"
         else:  # movement_prediction
-            q, expected, _ = sample_hard(self._scene, step_num=self._step + 1)
+            q, expected, meta = sample_hard(self._scene, step_num=self._step + 1)
             self._current_expected = expected
+            self._pending_move     = meta   # saved so step() can apply the move
             hint = "Answer with the item ID that must be relocated, or 'none'."
 
         return SpatialObservation(
@@ -152,3 +158,49 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
             step_num=self._step,
             hints=hint,
         )
+
+    def _apply_move(self, move_meta: dict) -> None:
+        """
+        Apply a movement event to self._scene so subsequent steps see updated positions.
+
+        The mover is placed at the target slot. If a conflict item occupied that slot,
+        it is relocated to the mover's old slot (a natural swap). This forces the LLM
+        to track cumulative state changes across the 5 steps rather than doing
+        independent per-step lookups against a static scene description.
+        """
+        mover_id = move_meta["mover"]
+        target_x = move_meta["target_x"]
+        target_y = move_meta["target_y"]
+
+        mover = next((i for i in self._scene["items"] if i["id"] == mover_id), None)
+        if not mover:
+            return
+
+        old_x, old_y = mover["x"], mover["y"]
+
+        # If a conflict item sits at the target, swap it to the mover's old slot
+        conflict = next(
+            (i for i in self._scene["items"]
+             if i["id"] != mover_id and i["x"] == target_x and i["y"] == target_y),
+            None,
+        )
+        if conflict:
+            old_aisle = AISLES[old_x]
+            conflict["x"]        = old_x
+            conflict["y"]        = old_y
+            conflict["aisle"]    = old_aisle
+            conflict["row"]      = old_y
+            conflict["location"] = f"Aisle {old_aisle}, Row {old_y}"
+            conflict["zone"]     = zone_for(old_aisle, old_y)
+
+        # Place mover at target
+        new_aisle = AISLES[target_x]
+        mover["x"]        = target_x
+        mover["y"]        = target_y
+        mover["aisle"]    = new_aisle
+        mover["row"]      = target_y
+        mover["location"] = f"Aisle {new_aisle}, Row {target_y}"
+        mover["zone"]     = zone_for(new_aisle, target_y)
+
+        # Regenerate scene description so LLM sees updated layout
+        self._scene["description"] = describe_scene(self._scene["items"])
