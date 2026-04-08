@@ -147,12 +147,12 @@ async def run_stream(
     Event types: episode_start | step | episode_end | done
     """
     from openai import OpenAI
-    from inference import run_task_rl, API_BASE_URL, API_KEY
+    from inference import run_task_rl, API_BASE_URL, HF_TOKEN
 
     tasks = [t.strip() for t in task_ids.split(",") if t.strip()]
 
     async def generate():
-        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
         all_scores: dict = {t: [] for t in tasks}
 
         for task_id in tasks:
