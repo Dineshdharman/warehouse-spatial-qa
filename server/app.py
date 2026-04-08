@@ -13,7 +13,8 @@ import os
 import sys
 
 # Ensure root package is importable whether run from repo root or server/
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BASE_DIR)
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +30,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    # Allow embedding in HuggingFace Spaces iframe
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self' https://huggingface.co https://*.hf.space"
+    return response
 
 _env = SpatialQAEnv()
 
@@ -129,7 +138,7 @@ async def mcp(request: Request):
 
 @app.get("/")
 def ui():
-    return FileResponse("index.html")
+    return FileResponse(os.path.join(_BASE_DIR, "index.html"))
 
 
 # ── RL Auto-Run with SSE streaming ────────────────────────────────────────────

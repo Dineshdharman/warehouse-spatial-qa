@@ -23,6 +23,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    # Allow embedding in HuggingFace Spaces iframe
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self' https://huggingface.co https://*.hf.space"
+    return response
+
 _env = SpatialQAEnv()
 
 
