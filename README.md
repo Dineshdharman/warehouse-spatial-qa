@@ -165,9 +165,6 @@ docker run -p 7860:7860 --env-file .env warehouse-spatial-qa
 ```bash
 # Validate local server
 openenv validate --url http://localhost:7860
-
-# Validate live HF Space
-openenv validate --url https://dinesh-kumar-26-warehouse-spatial-qa.hf.space
 ```
 
 ### 6. Run baseline inference (CLI)
@@ -218,7 +215,7 @@ pytest tests/ -v
 
 ## Web UI
 
-Open the live HF Space URL in a browser to get the interactive UI:
+Run the server locally (`uvicorn server.app:app --port 7860`) and open `http://localhost:7860` in a browser:
 
 **Auto Run tab** — select difficulty (Easy / Medium / Hard), set any number of episodes, click Run. The LLM plays automatically with live step-by-step output and a comprehensive score report.
 
@@ -251,6 +248,5 @@ Open the live HF Space URL in a browser to get the interactive UI:
 
 ## Links
 
-- **Live Demo**: [https://dinesh-kumar-26-warehouse-spatial-qa.hf.space](https://dinesh-kumar-26-warehouse-spatial-qa.hf.space)
 - **HuggingFace Space**: [https://huggingface.co/spaces/Dinesh-Kumar-26/warehouse-spatial-qa](https://huggingface.co/spaces/Dinesh-Kumar-26/warehouse-spatial-qa)
 - **GitHub Repository**: [https://github.com/Dineshdharman/warehouse-spatial-qa](https://github.com/Dineshdharman/warehouse-spatial-qa)
