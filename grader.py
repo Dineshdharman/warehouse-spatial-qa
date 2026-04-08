@@ -7,12 +7,55 @@ from typing import Union
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Answer extractors — handle verbose LLM responses gracefully
+# e.g. "I think it's B" → "b",  "The answer is yes." → "yes"
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _extract_yesno(text: str) -> str:
+    """Extract first 'yes' or 'no' token from a potentially verbose response."""
+    t = text.strip().lower()
+    m = re.search(r'\b(yes|no)\b', t)
+    return m.group(1) if m else t
+
+def _extract_id(text: str) -> str:
+    """
+    Extract a single item-letter ID (a–z) or 'none' from a verbose response.
+    Priority: explicit 'none' keyword > single-letter match.
+    """
+    t = text.strip().lower()
+    # Explicit 'none'
+    if re.search(r'\bnone\b', t):
+        return "none"
+    # XML tag: <answer>X</answer>
+    m = re.search(r'<answer>\s*([a-z])\s*</answer>', t)
+    if m:
+        return m.group(1)
+    # Patterns: "answer is X", "item X", "answer: X"
+    m = re.search(r'\b(?:answer(?:\s+is)?|item)[:\s]+([a-z])\b', t)
+    if m:
+        return m.group(1)
+    # Standalone single letter
+    m = re.fullmatch(r'([a-z])\.?', t)
+    if m:
+        return m.group(1)
+    # Last resort: first standalone letter a–z
+    m = re.search(r'\b([a-z])\b', t)
+    if m:
+        return m.group(1)
+    return t
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Task 1 — Easy: object_location
 # Binary: exact match = 1.0, any mismatch = 0.0
 # ─────────────────────────────────────────────────────────────────────────────
 
 def score_easy(agent_answer: str, expected: str) -> float:
-    return 1.0 if _normalize(agent_answer) == _normalize(expected) else 0.0
+    exp = _normalize(expected)
+    if exp in ("yes", "no"):
+        return 1.0 if _extract_yesno(agent_answer) == exp else 0.0
+    # zone or item-ID question
+    return 1.0 if _normalize(agent_answer) == exp else 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +101,7 @@ def score_medium(agent_answer: str, expected_parts: list) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def score_hard(agent_answer: str, expected: str) -> float:
-    return 1.0 if _normalize(agent_answer) == _normalize(expected) else 0.0
+    return 1.0 if _extract_id(agent_answer) == _normalize(expected) else 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
