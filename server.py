@@ -3,11 +3,14 @@ server.py — FastAPI HTTP wrapper for SpatialQAEnv.
 Exposes all endpoints required by openenv validate:
   POST /reset, POST /step, GET /state, GET /health,
   GET /metadata, GET /schema, POST /mcp, GET /
+Also exposes GET /run/stream for RL evaluation with SSE streaming.
 """
+import asyncio
+import json
 import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from models import SpatialAction, SpatialObservation, SpatialState
 from environment import SpatialQAEnv
 
@@ -120,3 +123,64 @@ async def mcp(request: Request):
 @app.get("/")
 def ui():
     return FileResponse("index.html")
+
+
+# ── RL Auto-Run with SSE streaming ────────────────────────────────────────────
+
+@app.get("/run/stream")
+async def run_stream(
+    task_ids: str = "object_location,multi_constraint_query,movement_prediction",
+    episodes: int = 1,
+):
+    """
+    SSE endpoint: runs N episodes per selected task using the LLM with RL
+    feedback loop. Streams one JSON event per step so the UI updates live.
+
+    Event types: episode_start | step | episode_end | done
+    """
+    from openai import OpenAI
+    from inference import run_task_rl, API_BASE_URL, API_KEY
+
+    tasks = [t.strip() for t in task_ids.split(",") if t.strip()]
+
+    async def generate():
+        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+        all_scores: dict = {t: [] for t in tasks}
+
+        for task_id in tasks:
+            for ep in range(episodes):
+                yield (
+                    f"data: {json.dumps({'type': 'episode_start', 'task': task_id, 'episode': ep + 1, 'total': episodes})}\n\n"
+                )
+                # Run in threadpool so async event loop stays responsive
+                result = await asyncio.to_thread(
+                    run_task_rl, client, task_id, ep, False
+                )
+                for step_data in result["steps"]:
+                    yield f"data: {json.dumps({'type': 'step', 'task': task_id, 'episode': ep + 1, **step_data})}\n\n"
+
+                all_scores[task_id].append(result["score"])
+                yield (
+                    f"data: {json.dumps({'type': 'episode_end', 'task': task_id, 'episode': ep + 1, 'score': result['score'], 'success': result['success'], 'rewards': result['rewards']})}\n\n"
+                )
+
+        # Final summary
+        summary = {}
+        for tid, scores in all_scores.items():
+            wins = sum(1 for s in scores if s >= 0.5)
+            summary[tid] = {
+                "avg_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
+                "win_rate":  round(wins / len(scores), 2) if scores else 0.0,
+                "episodes":  len(scores),
+            }
+        overall = (
+            round(sum(v["avg_score"] for v in summary.values()) / len(summary), 2)
+            if summary else 0.0
+        )
+        yield f"data: {json.dumps({'type': 'done', 'summary': summary, 'overall': overall})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

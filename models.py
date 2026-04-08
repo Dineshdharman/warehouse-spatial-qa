@@ -26,6 +26,10 @@ class SpatialObservation(Observation):
         default=None,
         description="Optional contextual hint for hard tasks"
     )
+    feedback: Optional[str] = Field(
+        default=None,
+        description="RL reward feedback from the previous step so the LLM can self-correct"
+    )
 
 
 class SpatialAction(Action):

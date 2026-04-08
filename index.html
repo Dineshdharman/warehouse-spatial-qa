@@ -5,206 +5,437 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Warehouse Spatial QA</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
-    h1 { color: #38bdf8; font-size: 1.8rem; margin-bottom: 0.25rem; }
-    .subtitle { color: #64748b; margin-bottom: 2rem; font-size: 0.95rem; }
-    .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    .card h2 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
-    select, input[type="text"] {
-      background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
-      padding: 0.6rem 1rem; border-radius: 8px; font-size: 1rem; width: 100%;
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;padding:1.5rem}
+    h1{color:#38bdf8;font-size:1.7rem;margin-bottom:.2rem}
+    .subtitle{color:#64748b;font-size:.9rem;margin-bottom:1.5rem}
+    /* Tabs */
+    .tabs{display:flex;gap:.5rem;margin-bottom:1.5rem}
+    .tab{padding:.5rem 1.2rem;border-radius:8px;cursor:pointer;font-size:.9rem;border:1px solid #334155;color:#94a3b8;background:transparent;transition:.15s}
+    .tab.active{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+    /* Cards */
+    .card{background:#1e293b;border-radius:12px;padding:1.4rem;margin-bottom:1.2rem}
+    .card h2{color:#94a3b8;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem}
+    /* Form controls */
+    select,input[type=text],input[type=number]{
+      background:#0f172a;border:1px solid #334155;color:#e2e8f0;
+      padding:.55rem .9rem;border-radius:8px;font-size:.95rem;width:100%
     }
-    select:focus, input[type="text"]:focus { outline: none; border-color: #0ea5e9; }
-    button {
-      background: #0ea5e9; color: #fff; border: none;
-      padding: 0.6rem 1.4rem; border-radius: 8px; font-size: 1rem;
-      cursor: pointer; white-space: nowrap; flex-shrink: 0;
-    }
-    button:hover { background: #0284c7; }
-    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
-    .row { display: flex; gap: 0.75rem; align-items: center; }
-    .scene {
-      font-family: monospace; font-size: 0.82rem; background: #0f172a;
-      padding: 1rem; border-radius: 8px; white-space: pre-wrap;
-      line-height: 1.7; color: #94a3b8; max-height: 220px; overflow-y: auto;
-    }
-    .question { font-size: 1.05rem; line-height: 1.7; color: #f1f5f9; white-space: pre-wrap; }
-    .hints { color: #64748b; font-size: 0.88rem; margin-top: 0.6rem; font-style: italic; }
-    .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-    .score-box { background: #0f172a; border-radius: 10px; padding: 1rem; text-align: center; }
-    .score-box .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
-    .score-box .value { font-size: 2rem; font-weight: 700; color: #38bdf8; }
-    .log {
-      font-family: monospace; font-size: 0.8rem; background: #0f172a;
-      padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto; color: #64748b;
-    }
-    .log div { padding: 0.15rem 0; }
-    .good { color: #4ade80; }
-    .bad  { color: #f87171; }
-    .info { color: #38bdf8; }
-    .badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 99px; font-size: 0.72rem; font-weight: 700; margin-left: 0.5rem; vertical-align: middle; }
-    .easy   { background: #166534; color: #4ade80; }
-    .medium { background: #854d0e; color: #fbbf24; }
-    .hard   { background: #7f1d1d; color: #f87171; }
-    #questionCard, #sceneCard, #answerCard { display: none; }
+    select:focus,input:focus{outline:none;border-color:#0ea5e9}
+    .row{display:flex;gap:.7rem;align-items:center}
+    /* Buttons */
+    .btn{border:none;padding:.55rem 1.3rem;border-radius:8px;font-size:.95rem;cursor:pointer;flex-shrink:0;font-weight:600}
+    .btn-primary{background:#0ea5e9;color:#fff}.btn-primary:hover{background:#0284c7}
+    .btn-danger{background:#dc2626;color:#fff}.btn-danger:hover{background:#b91c1c}
+    .btn-secondary{background:#334155;color:#94a3b8}.btn-secondary:hover{background:#475569}
+    .btn:disabled{background:#1e293b;color:#475569;cursor:not-allowed}
+    /* Checkboxes */
+    .check-group{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+    .check-item{display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.9rem}
+    .check-item input{width:16px;height:16px;accent-color:#0ea5e9}
+    .badge{display:inline-block;padding:.15rem .55rem;border-radius:99px;font-size:.72rem;font-weight:700;margin-left:.3rem}
+    .easy{background:#166534;color:#4ade80}.medium{background:#854d0e;color:#fbbf24}.hard{background:#7f1d1d;color:#f87171}
+    /* Progress bar */
+    .progress-wrap{background:#0f172a;border-radius:8px;height:8px;overflow:hidden;margin:.6rem 0}
+    .progress-bar{height:100%;background:#0ea5e9;border-radius:8px;transition:width .3s}
+    /* Score grid */
+    .score-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}
+    .score-box{background:#0f172a;border-radius:10px;padding:1rem;text-align:center}
+    .score-box .lbl{font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+    .score-box .val{font-size:1.8rem;font-weight:700;color:#38bdf8}
+    /* Log */
+    .log{font-family:monospace;font-size:.78rem;background:#0f172a;padding:.9rem;border-radius:8px;max-height:260px;overflow-y:auto;color:#64748b;line-height:1.6}
+    .log div{padding:.1rem 0}
+    .good{color:#4ade80}.bad{color:#f87171}.info{color:#38bdf8}.warn{color:#fbbf24}
+    /* Scene/question */
+    .scene{font-family:monospace;font-size:.8rem;background:#0f172a;padding:.9rem;border-radius:8px;white-space:pre-wrap;line-height:1.7;color:#94a3b8;max-height:200px;overflow-y:auto}
+    .question{font-size:1rem;line-height:1.7;color:#f1f5f9;white-space:pre-wrap}
+    .hints{color:#64748b;font-size:.85rem;margin-top:.5rem;font-style:italic}
+    #questionCard,#sceneCard,#answerCard{display:none}
+    /* Report */
+    .report-table{width:100%;border-collapse:collapse;font-size:.88rem}
+    .report-table th{color:#64748b;text-transform:uppercase;font-size:.7rem;letter-spacing:.05em;padding:.5rem .7rem;text-align:left;border-bottom:1px solid #334155}
+    .report-table td{padding:.55rem .7rem;border-bottom:1px solid #1e293b}
+    .report-table tr:last-child td{border:none;font-weight:700;color:#38bdf8}
+    /* Mini bar chart */
+    .bars{display:flex;gap:3px;align-items:flex-end;height:40px;margin-top:.5rem}
+    .bar{flex:1;min-width:4px;border-radius:3px 3px 0 0;transition:.3s}
+    /* Episode detail */
+    details{margin-bottom:.5rem}
+    details summary{cursor:pointer;padding:.4rem .6rem;background:#0f172a;border-radius:6px;font-size:.82rem;color:#94a3b8;list-style:none;display:flex;justify-content:space-between}
+    details summary::-webkit-details-marker{display:none}
+    details summary:hover{color:#e2e8f0}
+    .step-row{display:grid;grid-template-columns:50px 1fr 80px;gap:.5rem;padding:.4rem .6rem;font-size:.78rem;border-bottom:1px solid #1e293b}
+    .step-row:last-child{border:none}
+    .step-q{color:#94a3b8;font-size:.72rem;grid-column:1/-1;margin-top:-.2rem;padding:0 .6rem .4rem}
+    .step-fb{color:#fbbf24;font-size:.72rem;grid-column:1/-1;padding:0 .6rem .4rem;font-style:italic}
+    /* Overall badge */
+    .overall-score{font-size:3rem;font-weight:800;color:#38bdf8;text-align:center;padding:1rem 0}
+    .run-status{color:#94a3b8;font-size:.85rem;margin-bottom:.5rem}
   </style>
 </head>
 <body>
 
 <h1>&#127981; Warehouse Spatial QA</h1>
-<p class="subtitle">OpenEnv Hackathon &mdash; Interactive Evaluation Environment</p>
+<p class="subtitle">OpenEnv Hackathon &mdash; RL Evaluation Environment</p>
 
-<div class="card">
-  <h2>Task</h2>
-  <div class="row">
-    <select id="taskSelect">
-      <option value="object_location">object_location — Easy</option>
-      <option value="multi_constraint_query">multi_constraint_query — Medium</option>
-      <option value="movement_prediction">movement_prediction — Hard</option>
-    </select>
-    <button onclick="resetEnv()">Reset</button>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('run')">&#9654; Auto Run</button>
+  <button class="tab" onclick="switchTab('manual')">&#9998; Manual Play</button>
+</div>
+
+<!-- ═══════════════════ AUTO RUN TAB ═══════════════════ -->
+<div class="tab-panel active" id="tab-run">
+
+  <div class="card">
+    <h2>Run Configuration</h2>
+    <div class="check-group">
+      <label class="check-item">
+        <input type="checkbox" id="chk-easy" value="object_location" checked>
+        Easy <span class="badge easy">object_location</span>
+      </label>
+      <label class="check-item">
+        <input type="checkbox" id="chk-med" value="multi_constraint_query" checked>
+        Medium <span class="badge medium">multi_constraint_query</span>
+      </label>
+      <label class="check-item">
+        <input type="checkbox" id="chk-hard" value="movement_prediction" checked>
+        Hard <span class="badge hard">movement_prediction</span>
+      </label>
+    </div>
+    <div class="row">
+      <label style="color:#94a3b8;font-size:.88rem;white-space:nowrap">Episodes per task:</label>
+      <input type="number" id="episodeCount" value="3" min="1" style="max-width:100px">
+      <button class="btn btn-primary" id="runBtn" onclick="startRun()">&#9654; Run</button>
+      <button class="btn btn-danger" id="stopBtn" onclick="stopRun()" disabled>&#9632; Stop</button>
+    </div>
+  </div>
+
+  <!-- Live progress -->
+  <div class="card" id="progressCard" style="display:none">
+    <h2>Progress</h2>
+    <div class="run-status" id="runStatus">Starting…</div>
+    <div class="progress-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+    <div class="log" id="runLog">Initialising…</div>
+  </div>
+
+  <!-- Report -->
+  <div id="reportSection" style="display:none">
+
+    <div class="card">
+      <h2>Overall Score</h2>
+      <div class="overall-score" id="overallScore">—</div>
+    </div>
+
+    <div class="card">
+      <h2>Summary</h2>
+      <table class="report-table">
+        <thead>
+          <tr><th>Task</th><th>Avg Score</th><th>Win Rate</th><th>Episodes</th><th>Trend</th></tr>
+        </thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card" id="episodeDetailCard">
+      <h2>Episode Details</h2>
+      <div id="episodeDetails"></div>
+    </div>
+
   </div>
 </div>
 
-<div class="card" id="sceneCard">
-  <h2>Scene Description</h2>
-  <div class="scene" id="sceneText"></div>
-</div>
+<!-- ═══════════════════ MANUAL PLAY TAB ═══════════════════ -->
+<div class="tab-panel" id="tab-manual">
 
-<div class="card" id="questionCard">
-  <h2>Question <span id="taskBadge" class="badge"></span></h2>
-  <div class="question" id="questionText"></div>
-  <div class="hints" id="hintsText"></div>
-</div>
-
-<div class="card" id="answerCard">
-  <h2>Your Answer</h2>
-  <div class="row">
-    <input type="text" id="answerInput" placeholder="Type your answer and press Enter..."
-           onkeydown="if(event.key==='Enter') submitAnswer()" />
-    <button id="submitBtn" onclick="submitAnswer()">Submit</button>
-  </div>
-</div>
-
-<div class="card">
-  <h2>Scores</h2>
-  <div class="score-grid">
-    <div class="score-box">
-      <div class="label">Last Reward</div>
-      <div class="value" id="lastReward">—</div>
-    </div>
-    <div class="score-box">
-      <div class="label">Episode Score</div>
-      <div class="value" id="episodeScore">—</div>
-    </div>
-    <div class="score-box">
-      <div class="label">Steps</div>
-      <div class="value" id="stepsCount">—</div>
+  <div class="card">
+    <h2>Task</h2>
+    <div class="row">
+      <select id="taskSelect">
+        <option value="object_location">object_location — Easy</option>
+        <option value="multi_constraint_query">multi_constraint_query — Medium</option>
+        <option value="movement_prediction">movement_prediction — Hard</option>
+      </select>
+      <button class="btn btn-primary" onclick="resetEnv()">Reset</button>
     </div>
   </div>
-</div>
 
-<div class="card">
-  <h2>Log</h2>
-  <div class="log" id="logDiv">Ready. Select a task and click Reset to begin.</div>
+  <div class="card" id="sceneCard"><h2>Scene Description</h2><div class="scene" id="sceneText"></div></div>
+  <div class="card" id="questionCard">
+    <h2>Question <span id="taskBadge" class="badge"></span></h2>
+    <div class="question" id="questionText"></div>
+    <div class="hints" id="hintsText"></div>
+  </div>
+  <div class="card" id="answerCard">
+    <h2>Your Answer</h2>
+    <div class="row">
+      <input type="text" id="answerInput" placeholder="Type your answer and press Enter…" onkeydown="if(event.key==='Enter')submitAnswer()"/>
+      <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()">Submit</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Scores</h2>
+    <div class="score-grid">
+      <div class="score-box"><div class="lbl">Last Reward</div><div class="val" id="lastReward">—</div></div>
+      <div class="score-box"><div class="lbl">Episode Score</div><div class="val" id="episodeScore">—</div></div>
+      <div class="score-box"><div class="lbl">Steps</div><div class="val" id="stepsCount">—</div></div>
+    </div>
+  </div>
+  <div class="card"><h2>Log</h2><div class="log" id="manualLog">Select a task and click Reset.</div></div>
+
 </div>
 
 <script>
-  let stepCount = 0;
-  let rewards = [];
-  let done = false;
+// ── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab')[name === 'run' ? 0 : 1].classList.add('active');
+}
 
-  const BADGES = {
-    object_location:        ['Easy',   'easy'],
-    multi_constraint_query: ['Medium', 'medium'],
-    movement_prediction:    ['Hard',   'hard'],
+// ── Logging helpers ──────────────────────────────────────────────────────────
+function appendLog(el, msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTO RUN
+// ══════════════════════════════════════════════════════════════════════════════
+let runES = null;  // EventSource
+let runData = {};   // { task_id: [ episodeResult, ... ] }
+let totalSteps = 0, doneSteps = 0;
+
+function startRun() {
+  const tasks = ['object_location','multi_constraint_query','movement_prediction']
+    .filter(t => document.querySelector(`input[value="${t}"]`).checked);
+  if (!tasks.length) { alert('Select at least one difficulty.'); return; }
+
+  const episodes = Math.max(1, parseInt(document.getElementById('episodeCount').value) || 1);
+
+  // Estimate total steps for progress bar
+  const maxStepsMap = {object_location:1, multi_constraint_query:3, movement_prediction:5};
+  totalSteps = tasks.reduce((s, t) => s + maxStepsMap[t] * episodes, 0);
+  doneSteps  = 0;
+  runData    = {};
+  tasks.forEach(t => { runData[t] = []; });
+
+  document.getElementById('progressCard').style.display   = 'block';
+  document.getElementById('reportSection').style.display  = 'none';
+  document.getElementById('runLog').innerHTML             = '';
+  document.getElementById('progressBar').style.width      = '0%';
+  document.getElementById('runBtn').disabled              = true;
+  document.getElementById('stopBtn').disabled             = false;
+
+  const url = `/run/stream?task_ids=${tasks.join(',')}&episodes=${episodes}`;
+  runES = new EventSource(url);
+
+  runES.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    const log = document.getElementById('runLog');
+
+    if (ev.type === 'episode_start') {
+      document.getElementById('runStatus').textContent =
+        `Running ${ev.task} — Episode ${ev.episode}/${ev.total}`;
+      appendLog(log, `▶ [${ev.task}] Episode ${ev.episode}/${ev.total}`, 'info');
+      runData[ev.task].push({ episode: ev.episode, steps: [], score: null, rewards: [] });
+    }
+
+    else if (ev.type === 'step') {
+      doneSteps++;
+      const pct = Math.round((doneSteps / totalSteps) * 100);
+      document.getElementById('progressBar').style.width = pct + '%';
+      const cls = ev.reward >= 1.0 ? 'good' : ev.reward > 0 ? 'warn' : 'bad';
+      appendLog(log,
+        `  Step ${ev.step}: "${ev.answer}" → reward=${ev.reward.toFixed(2)} ${ev.done ? '(done)' : ''}`, cls);
+      if (ev.feedback && ev.reward < 1.0)
+        appendLog(log, `    feedback: ${ev.feedback}`, 'warn');
+      // Store step
+      const episodes = runData[ev.task];
+      if (episodes.length) episodes[episodes.length - 1].steps.push(ev);
+    }
+
+    else if (ev.type === 'episode_end') {
+      const episodes = runData[ev.task];
+      if (episodes.length) {
+        const ep = episodes[episodes.length - 1];
+        ep.score   = ev.score;
+        ep.success = ev.success;
+        ep.rewards = ev.rewards;
+      }
+      const cls = ev.success ? 'good' : 'bad';
+      appendLog(log, `  → Score: ${ev.score.toFixed(2)} ${ev.success ? '✓' : '✗'}`, cls);
+    }
+
+    else if (ev.type === 'done') {
+      runES.close(); runES = null;
+      document.getElementById('runBtn').disabled  = false;
+      document.getElementById('stopBtn').disabled = true;
+      document.getElementById('runStatus').textContent = 'Complete!';
+      document.getElementById('progressBar').style.width = '100%';
+      renderReport(ev.summary, ev.overall);
+    }
   };
 
-  function log(msg, cls) {
-    const d = document.getElementById('logDiv');
-    const line = document.createElement('div');
-    if (cls) line.className = cls;
-    line.textContent = msg;
-    d.appendChild(line);
-    d.scrollTop = d.scrollHeight;
-  }
+  runES.onerror = () => {
+    appendLog(document.getElementById('runLog'), 'Connection error or run complete.', 'bad');
+    document.getElementById('runBtn').disabled  = false;
+    document.getElementById('stopBtn').disabled = true;
+    if (runES) { runES.close(); runES = null; }
+  };
+}
 
-  function showObservation(obs) {
-    document.getElementById('sceneCard').style.display = 'block';
-    document.getElementById('questionCard').style.display = 'block';
-    document.getElementById('answerCard').style.display = 'block';
-    document.getElementById('sceneText').textContent = obs.scene_description || '';
-    document.getElementById('questionText').textContent = obs.question || '';
-    document.getElementById('hintsText').textContent = obs.hints ? 'Hint: ' + obs.hints : '';
-  }
+function stopRun() {
+  if (runES) { runES.close(); runES = null; }
+  document.getElementById('runBtn').disabled  = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('runStatus').textContent = 'Stopped.';
+}
 
-  function updateScores(reward) {
-    document.getElementById('lastReward').textContent = reward !== undefined ? reward.toFixed(2) : '—';
+// ── Report rendering ─────────────────────────────────────────────────────────
+const TASK_LABELS = {
+  object_location:        ['Easy',   'easy'],
+  multi_constraint_query: ['Medium', 'medium'],
+  movement_prediction:    ['Hard',   'hard'],
+};
+
+function renderReport(summary, overall) {
+  document.getElementById('reportSection').style.display = 'block';
+  document.getElementById('overallScore').textContent = (overall * 100).toFixed(0) + '%';
+
+  // Summary table
+  const tbody = document.getElementById('summaryBody');
+  tbody.innerHTML = '';
+  let rows = Object.entries(summary).map(([tid, s]) => {
+    const [label, cls] = TASK_LABELS[tid] || ['?',''];
+    const scores = (runData[tid] || []).map(e => e.score || 0);
+    const trend  = renderMiniBar(scores);
+    return `<tr>
+      <td><span class="badge ${cls}">${label}</span> ${tid}</td>
+      <td>${(s.avg_score * 100).toFixed(0)}%</td>
+      <td>${(s.win_rate * 100).toFixed(0)}%</td>
+      <td>${s.episodes}</td>
+      <td>${trend}</td>
+    </tr>`;
+  });
+  // Overall row
+  rows.push(`<tr><td>OVERALL</td><td>${(overall * 100).toFixed(0)}%</td><td>—</td><td>—</td><td></td></tr>`);
+  tbody.innerHTML = rows.join('');
+
+  // Episode details
+  const detailDiv = document.getElementById('episodeDetails');
+  detailDiv.innerHTML = '';
+  for (const [tid, episodes] of Object.entries(runData)) {
+    const [label, cls] = TASK_LABELS[tid] || ['?',''];
+    episodes.forEach(ep => {
+      const scoreStr = ep.score != null ? (ep.score * 100).toFixed(0) + '%' : '—';
+      const icon = ep.success ? '✓' : '✗';
+      const stepsHtml = (ep.steps || []).map(s => {
+        const c = s.reward >= 1 ? '#4ade80' : s.reward > 0 ? '#fbbf24' : '#f87171';
+        return `
+          <div class="step-row">
+            <span style="color:#64748b">Step ${s.step}</span>
+            <span>"${s.answer}"</span>
+            <span style="color:${c};text-align:right">${s.reward.toFixed(2)}</span>
+          </div>
+          <div class="step-q">${(s.question||'').slice(0,120)}${(s.question||'').length>120?'…':''}</div>
+          ${s.feedback && s.reward < 1 ? `<div class="step-fb">↳ ${s.feedback.slice(0,120)}</div>` : ''}
+        `;
+      }).join('');
+      detailDiv.innerHTML += `
+        <details>
+          <summary>
+            <span><span class="badge ${cls}">${label}</span> Episode ${ep.episode}</span>
+            <span style="color:${ep.success?'#4ade80':'#f87171'}">${icon} ${scoreStr}</span>
+          </summary>
+          ${stepsHtml || '<div style="padding:.5rem .6rem;color:#64748b;font-size:.8rem">No steps recorded.</div>'}
+        </details>`;
+    });
+  }
+}
+
+function renderMiniBar(scores) {
+  if (!scores.length) return '—';
+  const bars = scores.map(s => {
+    const h  = Math.max(4, Math.round(s * 40));
+    const c  = s >= 0.5 ? '#4ade80' : s > 0 ? '#fbbf24' : '#f87171';
+    return `<div class="bar" style="height:${h}px;background:${c}" title="${(s*100).toFixed(0)}%"></div>`;
+  }).join('');
+  return `<div class="bars">${bars}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MANUAL PLAY
+// ══════════════════════════════════════════════════════════════════════════════
+let stepCount = 0, rewards = [], manDone = false;
+const BADGES = {object_location:['Easy','easy'],multi_constraint_query:['Medium','medium'],movement_prediction:['Hard','hard']};
+
+function showObs(obs) {
+  document.getElementById('sceneCard').style.display   = 'block';
+  document.getElementById('questionCard').style.display = 'block';
+  document.getElementById('answerCard').style.display  = 'block';
+  document.getElementById('sceneText').textContent      = obs.scene_description || '';
+  document.getElementById('questionText').textContent   = obs.question || '';
+  document.getElementById('hintsText').textContent      = obs.hints ? 'Hint: ' + obs.hints : '';
+  if (obs.feedback) {
+    const log = document.getElementById('manualLog');
+    appendLog(log, '↳ Feedback: ' + obs.feedback, 'warn');
+  }
+}
+
+async function resetEnv() {
+  const task = document.getElementById('taskSelect').value;
+  stepCount = 0; rewards = []; manDone = false;
+  document.getElementById('manualLog').innerHTML = '';
+  ['lastReward','episodeScore','stepsCount'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('answerInput').value = '';
+  document.getElementById('submitBtn').disabled = false;
+  const [label, cls] = BADGES[task] || ['?',''];
+  const badge = document.getElementById('taskBadge');
+  badge.textContent = label; badge.className = 'badge ' + cls;
+  appendLog(document.getElementById('manualLog'), `Resetting → ${task}`, 'info');
+  try {
+    const res  = await fetch(`/reset?task_id=${task}`, {method:'POST'});
+    const data = await res.json();
+    showObs(data.observation || data);
+    appendLog(document.getElementById('manualLog'), 'Ready. Answer the question above.');
+  } catch(e) { appendLog(document.getElementById('manualLog'), 'Error: ' + e, 'bad'); }
+}
+
+async function submitAnswer() {
+  if (manDone) { appendLog(document.getElementById('manualLog'), 'Episode done. Click Reset.', 'info'); return; }
+  const answer = document.getElementById('answerInput').value.trim();
+  if (!answer) return;
+  document.getElementById('answerInput').value = '';
+  stepCount++;
+  const log = document.getElementById('manualLog');
+  appendLog(log, `Step ${stepCount}: "${answer}"`);
+  try {
+    const res  = await fetch('/step', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({answer})});
+    const data = await res.json();
+    const reward = data.reward ?? 0;
+    rewards.push(reward);
+    const cls = reward >= 1 ? 'good' : reward > 0 ? 'warn' : 'bad';
+    appendLog(log, `  reward=${reward.toFixed(2)}  done=${data.done}`, cls);
+    document.getElementById('lastReward').textContent = reward.toFixed(2);
     document.getElementById('stepsCount').textContent = stepCount;
-    if (rewards.length) {
-      const avg = rewards.reduce((a, b) => a + b, 0) / rewards.length;
-      document.getElementById('episodeScore').textContent = avg.toFixed(2);
+    const avg = rewards.reduce((a,b)=>a+b,0)/rewards.length;
+    document.getElementById('episodeScore').textContent = avg.toFixed(2);
+    if (data.done) {
+      manDone = true;
+      document.getElementById('submitBtn').disabled = true;
+      appendLog(log, `Episode complete — score: ${avg.toFixed(2)}`, avg >= 0.5 ? 'good' : 'bad');
+    } else {
+      showObs(data.observation || data);
     }
-  }
-
-  async function resetEnv() {
-    const task = document.getElementById('taskSelect').value;
-    stepCount = 0; rewards = []; done = false;
-    document.getElementById('logDiv').innerHTML = '';
-    document.getElementById('lastReward').textContent = '—';
-    document.getElementById('episodeScore').textContent = '—';
-    document.getElementById('stepsCount').textContent = '—';
-    document.getElementById('answerInput').value = '';
-    document.getElementById('submitBtn').disabled = false;
-
-    const [label, cls] = BADGES[task] || ['?', ''];
-    const badge = document.getElementById('taskBadge');
-    badge.textContent = label;
-    badge.className = 'badge ' + cls;
-
-    log(`Resetting → ${task}`, 'info');
-    try {
-      const res  = await fetch(`/reset?task_id=${task}`, { method: 'POST' });
-      const data = await res.json();
-      showObservation(data.observation);
-      log('Task ready. Answer the question above.');
-    } catch (e) {
-      log('Error: ' + e, 'bad');
-    }
-  }
-
-  async function submitAnswer() {
-    if (done) { log('Episode done. Click Reset to start again.', 'info'); return; }
-    const answer = document.getElementById('answerInput').value.trim();
-    if (!answer) return;
-    document.getElementById('answerInput').value = '';
-    stepCount++;
-    log(`Step ${stepCount}: "${answer}"`);
-    try {
-      const res  = await fetch('/step', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answer }),
-      });
-      const data = await res.json();
-      rewards.push(data.reward);
-      const cls = data.reward > 0 ? 'good' : 'bad';
-      log(`  reward=${data.reward.toFixed(2)}  done=${data.done}`, cls);
-      updateScores(data.reward);
-
-      if (data.done) {
-        done = true;
-        document.getElementById('submitBtn').disabled = true;
-        const avg = rewards.reduce((a, b) => a + b, 0) / rewards.length;
-        log(`Episode complete — final score: ${avg.toFixed(2)}`, avg >= 0.5 ? 'good' : 'bad');
-      } else {
-        showObservation(data.observation);
-      }
-    } catch (e) {
-      log('Error: ' + e, 'bad');
-    }
-  }
+  } catch(e) { appendLog(log, 'Error: ' + e, 'bad'); }
+}
 </script>
 </body>
 </html>

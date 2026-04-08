@@ -1,6 +1,9 @@
-
 """
-inference.py — Baseline inference script for Warehouse Spatial QA.
+inference.py — RL-style inference script for Warehouse Spatial QA.
+
+The LLM receives its reward and feedback after every step and maintains a
+conversation history so it can self-correct on subsequent steps — exactly
+like a policy-improvement loop in RL.
 
 MANDATORY FORMAT:
     [START] task=<task_name> env=<benchmark> model=<model_name>
@@ -10,12 +13,12 @@ MANDATORY FORMAT:
 Environment variables required:
     API_BASE_URL   LLM API endpoint
     MODEL_NAME     Model identifier
-    HF_TOKEN       Hugging Face / API key
+    HF_TOKEN       Hugging Face / API key (no default)
     ENV_SEED       Random seed (default: 42)
 """
 import os
 import textwrap
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -44,6 +47,7 @@ SYSTEM_PROMPT = textwrap.dedent("""
     For item ID questions: answer with the single letter ID only (e.g. "A", "B").
     For zone questions: answer with one of: RECEIVING, SHIPPING, BULK_STORAGE_WEST, BULK_STORAGE_EAST.
     For multi-part questions: use the exact format requested.
+    When you receive feedback about a wrong answer, carefully re-read the question and correct yourself.
 """).strip()
 
 
@@ -72,17 +76,12 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
 
-def get_agent_answer(client: OpenAI, scene_description: str, question: str, hints: Optional[str]) -> str:
-    user_content = f"Scene:\n{scene_description}\n\nQuestion:\n{question}"
-    if hints:
-        user_content += f"\n\nFormat hint: {hints}"
+def call_llm(client: OpenAI, messages: List[Dict]) -> str:
+    """Call the LLM with full conversation history. Returns the answer string."""
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": user_content},
-            ],
+            messages=messages,
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
             stream=False,
@@ -93,24 +92,47 @@ def get_agent_answer(client: OpenAI, scene_description: str, question: str, hint
         return "none"
 
 
-# ── Episode runner ────────────────────────────────────────────────────────────
+# ── RL episode runner ─────────────────────────────────────────────────────────
 
-def run_task(client: OpenAI, task_id: str) -> float:
-    """Run one full episode for the given task. Returns final score in [0, 1]."""
+def run_task_rl(
+    client: OpenAI,
+    task_id: str,
+    episode_num: int = 0,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """
+    Run one episode with RL-style feedback loop.
+
+    After each step the environment's reward + feedback message is appended
+    to the conversation history so the LLM can self-correct on the next step.
+
+    Returns a structured dict with all step data for reporting.
+    """
     from environment import SpatialQAEnv
     from models import SpatialAction
 
     env         = SpatialQAEnv(n_items=4)
     rewards: List[float] = []
+    steps_data: List[Dict] = []
     steps_taken = 0
     score       = 0.0
     success     = False
 
-    log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
+    if verbose:
+        log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
 
     try:
         obs  = env.reset(task_id=task_id)
         done = obs.done
+
+        # Build conversation history — persists across all steps in this episode
+        messages: List[Dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+        # First user message: full scene + first question
+        first_msg = f"Scene:\n{obs.scene_description}\n\nQuestion:\n{obs.question}"
+        if obs.hints:
+            first_msg += f"\n\nFormat hint: {obs.hints}"
+        messages.append({"role": "user", "content": first_msg})
 
         max_steps = MAX_STEPS_PER_TASK[task_id]
 
@@ -118,25 +140,43 @@ def run_task(client: OpenAI, task_id: str) -> float:
             if done:
                 break
 
-            answer = get_agent_answer(
-                client,
-                obs.scene_description,
-                obs.question,
-                obs.hints,
-            )
+            current_question = obs.question
 
+            # ── LLM answers with full conversation history ──────────────────
+            answer = call_llm(client, messages)
+            messages.append({"role": "assistant", "content": answer})
+
+            # ── Step in environment ─────────────────────────────────────────
             obs    = env.step(SpatialAction(answer=answer))
             reward = float(obs.reward or 0.0)
             done   = obs.done
-            error  = obs.metadata.get("error") if obs.metadata else None
+            feedback = obs.feedback or ""
+            error    = obs.metadata.get("error") if obs.metadata else None
 
             rewards.append(reward)
             steps_taken = step
 
-            log_step(step=step, action=answer, reward=reward, done=done, error=error)
+            if verbose:
+                log_step(step=step, action=answer, reward=reward, done=done, error=error)
 
-            if done:
-                break
+            steps_data.append({
+                "step":     step,
+                "question": current_question,
+                "answer":   answer,
+                "reward":   reward,
+                "feedback": feedback,
+                "done":     done,
+            })
+
+            # ── Feed reward + feedback back into conversation ───────────────
+            if not done and feedback:
+                next_msg = (
+                    f"[RL Feedback] Reward: {reward:.2f}. {feedback}\n\n"
+                    f"Next question:\n{obs.question}"
+                )
+                if obs.hints:
+                    next_msg += f"\n\nFormat hint: {obs.hints}"
+                messages.append({"role": "user", "content": next_msg})
 
         score   = sum(rewards) / len(rewards) if rewards else 0.0
         score   = round(min(max(score, 0.0), 1.0), 2)
@@ -144,9 +184,17 @@ def run_task(client: OpenAI, task_id: str) -> float:
 
     finally:
         env.close()
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        if verbose:
+            log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
-    return score
+    return {
+        "episode":  episode_num + 1,
+        "task_id":  task_id,
+        "score":    score,
+        "success":  success,
+        "steps":    steps_data,
+        "rewards":  rewards,
+    }
 
 
 # ── Main: run all 3 tasks ─────────────────────────────────────────────────────
@@ -156,8 +204,8 @@ def main() -> None:
     task_scores = {}
 
     for task_id in ["object_location", "multi_constraint_query", "movement_prediction"]:
-        score = run_task(client, task_id)
-        task_scores[task_id] = score
+        result          = run_task_rl(client, task_id, episode_num=0, verbose=True)
+        task_scores[task_id] = result["score"]
 
     print("\n[SUMMARY]", flush=True)
     for task_id, s in task_scores.items():

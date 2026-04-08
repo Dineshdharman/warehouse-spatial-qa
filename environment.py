@@ -11,7 +11,7 @@ from openenv.core import Environment
 from models import SpatialObservation, SpatialAction, SpatialState
 from scene_generator import generate_scene
 from question_bank import sample_easy, sample_medium, sample_hard
-from grader import score as grade
+from grader import score as grade, generate_feedback
 
 _SEED = int(os.environ.get("ENV_SEED", 42))
 random.seed(_SEED)
@@ -109,10 +109,12 @@ class SpatialQAEnv(Environment[SpatialAction, SpatialObservation, SpatialState])
 
         self._step_rewards.append(reward)
 
+        fb           = generate_feedback(self._task_id, action.answer, expected, reward)
         obs          = self._make_observation()
         obs.done     = self._done
         obs.reward   = float(reward)
         obs.metadata = info
+        obs.feedback = fb
         return obs
 
     def state(self) -> dict:

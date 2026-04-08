@@ -25,6 +25,8 @@ Spatial reasoning is a critical capability for autonomous robots, logistics plan
 
 The environment generates randomized warehouse floor plans (4×10 grid, 4 operational zones) with named items at specific positions, then challenges the agent with spatial questions that require genuine geometric reasoning — not pattern matching.
 
+The environment also implements an **RL-style feedback loop**: after each step, the reward and a human-readable feedback message are fed back into the LLM's conversation history so it can self-correct on subsequent steps — exactly like a policy-improvement loop in reinforcement learning.
+
 ---
 
 ## Observation Space
@@ -33,11 +35,12 @@ Each step the agent receives:
 
 | Field | Type | Description |
 |---|---|---|
-| `scene_description` | `string` | Natural-language description of the full warehouse layout including all item positions, aisles, rows, and zone assignments |
+| `scene_description` | `string` | Natural-language description of the full warehouse layout |
 | `question` | `string` | Spatial question the agent must answer this step |
 | `task_id` | `string` | Active task: `object_location` / `multi_constraint_query` / `movement_prediction` |
 | `step_num` | `int` | Current step within the episode (1-indexed) |
-| `hints` | `string` (optional) | Format hint shown for medium/hard tasks |
+| `hints` | `string` (optional) | Format hint for medium/hard tasks |
+| `feedback` | `string` (optional) | RL reward feedback from the previous step for self-correction |
 | `done` | `bool` | Whether the episode has ended |
 | `reward` | `float \| null` | Reward from the last action (`null` on reset) |
 
@@ -56,34 +59,48 @@ Each step the agent receives:
 ### Task 1 — `object_location` (Easy)
 - **Max steps**: 1
 - **Reward**: Binary — 1.0 (correct) or 0.0 (wrong)
-- **Description**: Single spatial question about item positions. Question types include:
+- **Description**: Single spatial question about item positions. Question types:
   - *West-of*: "Is item A located west of item B? Answer yes or no."
   - *North-of*: "Is item A positioned further north than item B?"
   - *Nearest neighbor*: "Which item is physically closest to item C?"
   - *Zone query*: "Which operational zone is item D assigned to?"
   - *Same zone*: "Are items A and B in the same operational zone?"
-- **Anti-gaming**: yes/no questions are guaranteed 50/50 split by construction; answers are computed deterministically from the scene.
+- **Anti-gaming**: yes/no questions guaranteed 50/50 split by construction.
 
 ---
 
 ### Task 2 — `multi_constraint_query` (Medium)
 - **Max steps**: 3
 - **Reward**: 0.5 per correct sub-answer per step (max 1.0)
-- **Description**: Two-part compound query answered in a single response:
+- **Description**: Two-part compound query:
   - Part 1: Zone of a specific item
   - Part 2: Nearest item to a different reference item
-  - **Format**: `Part1=<ZONE>, Part2=<ID>`
-- **Anti-gaming**: Part1 has 4 possible answers (0.25 random baseline); Part2 answer depends on exact Euclidean distances.
+  - **Required format**: `Part1=<ZONE>, Part2=<ID>`
+- **Anti-gaming**: Part1 has 4 possible answers (0.25 random baseline).
 
 ---
 
 ### Task 3 — `movement_prediction` (Hard)
 - **Max steps**: 5
 - **Reward**: 1.0 per correctly predicted conflict per step; averaged for final score
-- **Description**: Each step presents a warehouse movement event. An item is being relocated. The agent must predict:
-  - Which item currently occupying the target slot must be cleared first, OR
-  - `"none"` if the target slot is unoccupied
-- **Anti-gaming**: ~50% conflict rate by controlled random generation; bounded displacements prevent always-empty-slot gamability.
+- **Description**: Each step presents a movement event. The agent predicts which item must be cleared from the target slot, or `"none"` if unoccupied.
+- **Anti-gaming**: ~50% conflict rate; bounded displacements prevent all-empty-slot gamability.
+
+---
+
+## RL Feedback Loop
+
+After each step the environment returns a `feedback` field in the observation:
+
+```
+Step 1: Agent answers "no"  →  reward=0.0
+Feedback: "Incorrect. Expected 'yes'. Answer exactly 'yes' or 'no'."
+
+Step 2 (multi_constraint): Agent answers "Part1=SHIPPING, Part2=A"  →  reward=0.5
+Feedback: "Part1 correct (SHIPPING); Part2 wrong — expected 'C', got 'A'. Use format: Part1=<ZONE>, Part2=<ID>"
+```
+
+This feedback is injected into the LLM's conversation history so it can self-correct — just like reward shaping in RL.
 
 ---
 
@@ -93,9 +110,9 @@ Each step the agent receives:
 |---|---|---|---|
 | `object_location` | Binary | 0.0 / 1.0 | Exact match required |
 | `multi_constraint_query` | Partial | 0.0 – 1.0 | 0.5 per correct part |
-| `movement_prediction` | Per-step binary averaged | 0.0 – 1.0 | Averaged across all 5 steps |
+| `movement_prediction` | Per-step binary averaged | 0.0 – 1.0 | Averaged across 5 steps |
 
-All rewards are deterministic and reproducible. Wrong/malformed answers always score 0.0 — never negative.
+All rewards are deterministic and reproducible. Malformed answers score 0.0.
 
 ---
 
@@ -114,13 +131,13 @@ Evaluated with `Qwen/Qwen2.5-72B-Instruct` via Hugging Face router API (`ENV_SEE
 
 ## Setup & Usage
 
-### Requirements
+### 1. Install dependencies
 ```bash
 pip install openenv-core
 pip install -r requirements.txt
 ```
 
-### Environment Variables
+### 2. Set environment variables
 Create a `.env` file:
 ```env
 HF_TOKEN=your_huggingface_token_here
@@ -133,39 +150,50 @@ ENV_SEED=42
 
 ---
 
-### 1. Run Locally with Uvicorn
+### 3. Run locally with Uvicorn
 ```bash
-cd spatial-qa-env
-uvicorn server:app --host 0.0.0.0 --port 7860 --reload
+uvicorn server.app:app --host 0.0.0.0 --port 7860 --reload
 ```
 
-### 2. Run via Docker
+### 4. Run via Docker
 ```bash
 docker build -t warehouse-spatial-qa .
 docker run -p 7860:7860 --env-file .env warehouse-spatial-qa
 ```
 
-### 3. Validate with OpenEnv CLI
+### 5. Validate with OpenEnv CLI
 ```bash
-# Validate running server
+# Validate local server
 openenv validate --url http://localhost:7860
 
 # Validate live HF Space
 openenv validate --url https://dinesh-kumar-26-warehouse-spatial-qa.hf.space
 ```
 
-### 4. Run Baseline Inference
+### 6. Run baseline inference (CLI)
 ```bash
 python inference.py
 ```
+
 Output follows the mandatory `[START]` / `[STEP]` / `[END]` format:
 ```
 [START] task=object_location env=warehouse-spatial-qa model=Qwen/Qwen2.5-72B-Instruct
 [STEP] step=1 action='yes' reward=1.00 done=true error=null
 [END] success=true steps=1 score=1.00 rewards=1.00
+
+[START] task=multi_constraint_query env=warehouse-spatial-qa model=Qwen/Qwen2.5-72B-Instruct
+[STEP] step=1 action='Part1=SHIPPING, Part2=A' reward=0.50 done=false error=null
+[STEP] step=2 action='Part1=BULK_STORAGE_EAST, Part2=C' reward=1.00 done=false error=null
+...
+
+[SUMMARY]
+  object_location: 1.00
+  multi_constraint_query: 0.33
+  movement_prediction: 0.00
+  overall: 0.44
 ```
 
-### 5. Run Tests
+### 7. Run tests
 ```bash
 pytest tests/ -v
 ```
@@ -177,38 +205,52 @@ pytest tests/ -v
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/reset?task_id=<id>` | Start new episode, returns initial observation |
-| `POST` | `/step` | Submit `{"answer": "..."}`, returns observation + reward |
+| `POST` | `/step` | Submit `{"answer": "..."}`, returns observation + reward + feedback |
 | `GET` | `/state` | Full internal environment state |
 | `GET` | `/health` | Health check — returns `{"status": "healthy"}` |
 | `GET` | `/metadata` | Environment name, description, tags |
 | `GET` | `/schema` | JSON schemas for action, observation, state |
 | `POST` | `/mcp` | JSON-RPC 2.0 MCP tool discovery |
-| `GET` | `/` | Interactive web UI |
+| `GET` | `/run/stream` | SSE stream: runs LLM auto-evaluation with RL feedback loop |
+| `GET` | `/` | Interactive web UI (Auto Run + Manual Play) |
+
+---
+
+## Web UI
+
+Open the live HF Space URL in a browser to get the interactive UI:
+
+**Auto Run tab** — select difficulty (Easy / Medium / Hard), set any number of episodes, click Run. The LLM plays automatically with live step-by-step output and a comprehensive score report.
+
+**Manual Play tab** — interact with the environment yourself, see the warehouse scene, answer questions, and get real-time reward feedback.
 
 ---
 
 ## Project Structure
 
 ```
-spatial-qa-env/
-├── server.py           # FastAPI HTTP server (all OpenEnv endpoints)
-├── environment.py      # SpatialQAEnv(Environment) — core logic
-├── models.py           # SpatialAction, SpatialObservation, SpatialState
+├── server/
+│   ├── app.py          # FastAPI entry point (Dockerfile + openenv validate)
+│   └── __init__.py
+├── server.py           # FastAPI server (development alias)
+├── environment.py      # SpatialQAEnv(Environment) — core logic + RL feedback
+├── models.py           # SpatialAction, SpatialObservation (with feedback), SpatialState
 ├── scene_generator.py  # Random warehouse scene generator
 ├── question_bank.py    # Task question samplers (easy/medium/hard)
-├── grader.py           # Deterministic scoring functions
-├── inference.py        # Baseline LLM evaluation script
+├── grader.py           # Deterministic scoring + RL feedback generator
+├── inference.py        # Baseline LLM evaluation script with RL loop
 ├── index.html          # Interactive web UI
 ├── openenv.yaml        # OpenEnv metadata
 ├── pyproject.toml      # Python project config
 ├── requirements.txt    # Runtime dependencies
 ├── Dockerfile          # Container definition
-└── tests/              # 139 unit tests
+└── tests/              # Unit tests
 ```
 
 ---
 
 ## Links
 
-- **HuggingFace Space**: https://huggingface.co/spaces/Dinesh-Kumar-26/warehouse-spatial-qa
-- **GitHub Repository**: https://github.com/Dineshdharman/warehouse-spatial-qa
+- **Live Demo**: [https://dinesh-kumar-26-warehouse-spatial-qa.hf.space](https://dinesh-kumar-26-warehouse-spatial-qa.hf.space)
+- **HuggingFace Space**: [https://huggingface.co/spaces/Dinesh-Kumar-26/warehouse-spatial-qa](https://huggingface.co/spaces/Dinesh-Kumar-26/warehouse-spatial-qa)
+- **GitHub Repository**: [https://github.com/Dineshdharman/warehouse-spatial-qa](https://github.com/Dineshdharman/warehouse-spatial-qa)
