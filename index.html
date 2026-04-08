@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warehouse Spatial QA</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    h1 { color: #38bdf8; font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #64748b; margin-bottom: 2rem; font-size: 0.95rem; }
+    .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card h2 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+    select, input[type="text"] {
+      background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
+      padding: 0.6rem 1rem; border-radius: 8px; font-size: 1rem; width: 100%;
+    }
+    select:focus, input[type="text"]:focus { outline: none; border-color: #0ea5e9; }
+    button {
+      background: #0ea5e9; color: #fff; border: none;
+      padding: 0.6rem 1.4rem; border-radius: 8px; font-size: 1rem;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    button:hover { background: #0284c7; }
+    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .row { display: flex; gap: 0.75rem; align-items: center; }
+    .scene {
+      font-family: monospace; font-size: 0.82rem; background: #0f172a;
+      padding: 1rem; border-radius: 8px; white-space: pre-wrap;
+      line-height: 1.7; color: #94a3b8; max-height: 220px; overflow-y: auto;
+    }
+    .question { font-size: 1.05rem; line-height: 1.7; color: #f1f5f9; white-space: pre-wrap; }
+    .hints { color: #64748b; font-size: 0.88rem; margin-top: 0.6rem; font-style: italic; }
+    .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .score-box { background: #0f172a; border-radius: 10px; padding: 1rem; text-align: center; }
+    .score-box .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+    .score-box .value { font-size: 2rem; font-weight: 700; color: #38bdf8; }
+    .log {
+      font-family: monospace; font-size: 0.8rem; background: #0f172a;
+      padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto; color: #64748b;
+    }
+    .log div { padding: 0.15rem 0; }
+    .good { color: #4ade80; }
+    .bad  { color: #f87171; }
+    .info { color: #38bdf8; }
+    .badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 99px; font-size: 0.72rem; font-weight: 700; margin-left: 0.5rem; vertical-align: middle; }
+    .easy   { background: #166534; color: #4ade80; }
+    .medium { background: #854d0e; color: #fbbf24; }
+    .hard   { background: #7f1d1d; color: #f87171; }
+    #questionCard, #sceneCard, #answerCard { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>&#127981; Warehouse Spatial QA</h1>
+<p class="subtitle">OpenEnv Hackathon &mdash; Interactive Evaluation Environment</p>
+
+<div class="card">
+  <h2>Task</h2>
+  <div class="row">
+    <select id="taskSelect">
+      <option value="object_location">object_location — Easy</option>
+      <option value="multi_constraint_query">multi_constraint_query — Medium</option>
+      <option value="movement_prediction">movement_prediction — Hard</option>
+    </select>
+    <button onclick="resetEnv()">Reset</button>
+  </div>
+</div>
+
+<div class="card" id="sceneCard">
+  <h2>Scene Description</h2>
+  <div class="scene" id="sceneText"></div>
+</div>
+
+<div class="card" id="questionCard">
+  <h2>Question <span id="taskBadge" class="badge"></span></h2>
+  <div class="question" id="questionText"></div>
+  <div class="hints" id="hintsText"></div>
+</div>
+
+<div class="card" id="answerCard">
+  <h2>Your Answer</h2>
+  <div class="row">
+    <input type="text" id="answerInput" placeholder="Type your answer and press Enter..."
+           onkeydown="if(event.key==='Enter') submitAnswer()" />
+    <button id="submitBtn" onclick="submitAnswer()">Submit</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Scores</h2>
+  <div class="score-grid">
+    <div class="score-box">
+      <div class="label">Last Reward</div>
+      <div class="value" id="lastReward">—</div>
+    </div>
+    <div class="score-box">
+      <div class="label">Episode Score</div>
+      <div class="value" id="episodeScore">—</div>
+    </div>
+    <div class="score-box">
+      <div class="label">Steps</div>
+      <div class="value" id="stepsCount">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Log</h2>
+  <div class="log" id="logDiv">Ready. Select a task and click Reset to begin.</div>
+</div>
+
+<script>
+  let stepCount = 0;
+  let rewards = [];
+  let done = false;
+
+  const BADGES = {
+    object_location:        ['Easy',   'easy'],
+    multi_constraint_query: ['Medium', 'medium'],
+    movement_prediction:    ['Hard',   'hard'],
+  };
+
+  function log(msg, cls) {
+    const d = document.getElementById('logDiv');
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    d.appendChild(line);
+    d.scrollTop = d.scrollHeight;
+  }
+
+  function showObservation(obs) {
+    document.getElementById('sceneCard').style.display = 'block';
+    document.getElementById('questionCard').style.display = 'block';
+    document.getElementById('answerCard').style.display = 'block';
+    document.getElementById('sceneText').textContent = obs.scene_description || '';
+    document.getElementById('questionText').textContent = obs.question || '';
+    document.getElementById('hintsText').textContent = obs.hints ? 'Hint: ' + obs.hints : '';
+  }
+
+  function updateScores(reward) {
+    document.getElementById('lastReward').textContent = reward !== undefined ? reward.toFixed(2) : '—';
+    document.getElementById('stepsCount').textContent = stepCount;
+    if (rewards.length) {
+      const avg = rewards.reduce((a, b) => a + b, 0) / rewards.length;
+      document.getElementById('episodeScore').textContent = avg.toFixed(2);
+    }
+  }
+
+  async function resetEnv() {
+    const task = document.getElementById('taskSelect').value;
+    stepCount = 0; rewards = []; done = false;
+    document.getElementById('logDiv').innerHTML = '';
+    document.getElementById('lastReward').textContent = '—';
+    document.getElementById('episodeScore').textContent = '—';
+    document.getElementById('stepsCount').textContent = '—';
+    document.getElementById('answerInput').value = '';
+    document.getElementById('submitBtn').disabled = false;
+
+    const [label, cls] = BADGES[task] || ['?', ''];
+    const badge = document.getElementById('taskBadge');
+    badge.textContent = label;
+    badge.className = 'badge ' + cls;
+
+    log(`Resetting → ${task}`, 'info');
+    try {
+      const res  = await fetch(`/reset?task_id=${task}`, { method: 'POST' });
+      const data = await res.json();
+      showObservation(data.observation);
+      log('Task ready. Answer the question above.');
+    } catch (e) {
+      log('Error: ' + e, 'bad');
+    }
+  }
+
+  async function submitAnswer() {
+    if (done) { log('Episode done. Click Reset to start again.', 'info'); return; }
+    const answer = document.getElementById('answerInput').value.trim();
+    if (!answer) return;
+    document.getElementById('answerInput').value = '';
+    stepCount++;
+    log(`Step ${stepCount}: "${answer}"`);
+    try {
+      const res  = await fetch('/step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answer }),
+      });
+      const data = await res.json();
+      rewards.push(data.reward);
+      const cls = data.reward > 0 ? 'good' : 'bad';
+      log(`  reward=${data.reward.toFixed(2)}  done=${data.done}`, cls);
+      updateScores(data.reward);
+
+      if (data.done) {
+        done = true;
+        document.getElementById('submitBtn').disabled = true;
+        const avg = rewards.reduce((a, b) => a + b, 0) / rewards.length;
+        log(`Episode complete — final score: ${avg.toFixed(2)}`, avg >= 0.5 ? 'good' : 'bad');
+      } else {
+        showObservation(data.observation);
+      }
+    } catch (e) {
+      log('Error: ' + e, 'bad');
+    }
+  }
+</script>
+</body>
+</html>

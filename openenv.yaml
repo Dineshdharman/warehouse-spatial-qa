@@ -1,0 +1,66 @@
+name: warehouse-spatial-qa
+version: "1.0.0"
+description: >
+  A spatial reasoning benchmark where an AI agent reads natural-language
+  descriptions of warehouse/logistics floor-plan layouts and answers spatial
+  questions. Tests skills critical for robotics navigation, autonomous
+  logistics, and geographic information systems.
+author: "Dinesh Kumar"
+tags:
+  - openenv
+  - spatial-reasoning
+  - logistics
+  - real-world
+
+tasks:
+  - id: object_location
+    description: >
+      Agent answers a single spatial question about object positions
+      (left/right, above/below, nearest neighbor).
+    difficulty: easy
+    max_steps: 1
+    reward_range: [0.0, 1.0]
+
+  - id: multi_constraint_query
+    description: >
+      Agent answers a compound spatial query requiring reasoning over
+      multiple objects and spatial constraints simultaneously.
+    difficulty: medium
+    max_steps: 3
+    reward_range: [0.0, 1.0]
+
+  - id: movement_prediction
+    description: >
+      Agent predicts the resulting spatial configuration after a sequence
+      of object movements, identifying displaced or affected items.
+    difficulty: hard
+    max_steps: 5
+    reward_range: [0.0, 1.0]
+
+observation_space:
+  type: object
+  properties:
+    scene_description:
+      type: string
+      description: Natural-language description of the warehouse floor plan
+    question:
+      type: string
+      description: Spatial question the agent must answer
+    task_id:
+      type: string
+      description: Active task identifier
+    step_num:
+      type: integer
+      description: Current step number within the episode
+
+action_space:
+  type: object
+  properties:
+    answer:
+      type: string
+      description: The agent's free-text answer to the spatial question
+
+endpoints:
+  reset: POST /reset
+  step:  POST /step
+  state: GET  /state
