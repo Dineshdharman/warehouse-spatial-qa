@@ -90,8 +90,8 @@ def test_always_wrong_answer_id_does_not_score_high_on_nearest():
         random.seed(seed)
         scene = generate_scene(4)
         q, expected, _ = q_nearest(scene)
-        assert score("object_location", "z", expected) == 0.0, \
-            "Invalid item ID should always score 0.0"
+        assert score("object_location", "z", expected) <= 0.01, \
+            "Invalid item ID should score at most 0.01"
 
 
 # ── Graders produce varied output (not stuck) ────────────────────────────────

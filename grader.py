@@ -111,20 +111,21 @@ def score_hard(agent_answer: str, expected: str) -> float:
 def score(task_id: str, agent_answer, expected: Union[str, list]) -> float:
     """
     Routes scoring to the appropriate grader.
-    Always returns float in [0.0, 1.0].
-    Never raises on bad input — returns 0.0 for malformed answers.
+    Always returns float strictly in (0.0, 1.0) exclusive — never 0.0 or 1.0.
+    Never raises on bad input — returns 0.01 for malformed answers.
     """
     try:
         if task_id == "object_location":
-            return score_easy(agent_answer, expected)
+            raw = score_easy(agent_answer, expected)
         elif task_id == "multi_constraint_query":
-            return score_medium(agent_answer, expected)
+            raw = score_medium(agent_answer, expected)
         elif task_id == "movement_prediction":
-            return score_hard(agent_answer, expected)
+            raw = score_hard(agent_answer, expected)
         else:
-            return 0.0
+            raw = 0.0
+        return round(min(max(raw, 0.01), 0.99), 2)
     except Exception:
-        return 0.0
+        return 0.01
 
 
 def _normalize(text) -> str:
@@ -145,7 +146,7 @@ def generate_feedback(task_id: str, agent_answer: str, expected, reward: float) 
     """
     try:
         if task_id == "object_location":
-            if reward == 1.0:
+            if reward >= 0.99:
                 return "Correct!"
             return (
                 f"Incorrect (reward=0.0). You answered '{agent_answer}', "
@@ -163,7 +164,7 @@ def generate_feedback(task_id: str, agent_answer: str, expected, reward: float) 
             p2 = _normalize(p2_match.group(1)) if p2_match else ""
             p1_ok = p1 == _normalize(expected[0])
             p2_ok = p2 == _normalize(expected[1])
-            if reward == 1.0:
+            if reward >= 0.99:
                 return "Both parts correct!"
             parts = []
             if p1_ok:
@@ -180,7 +181,7 @@ def generate_feedback(task_id: str, agent_answer: str, expected, reward: float) 
             )
 
         elif task_id == "movement_prediction":
-            if reward == 1.0:
+            if reward >= 0.99:
                 return "Correct! Moving to the next movement event."
             if expected == "none":
                 return (

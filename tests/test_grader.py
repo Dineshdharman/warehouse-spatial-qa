@@ -92,24 +92,24 @@ def test_hard_returns_float():
 # ── Universal dispatcher ──────────────────────────────────────────────────────
 
 def test_dispatcher_routes_all_tasks():
-    assert score("object_location",        "yes",                        "yes")          == 1.0
-    assert score("multi_constraint_query", "Part1=RECEIVING, Part2=b",   ["RECEIVING","b"]) == 1.0
-    assert score("movement_prediction",    "b",                          "b")             == 1.0
+    assert score("object_location",        "yes",                        "yes")          == 0.99
+    assert score("multi_constraint_query", "Part1=RECEIVING, Part2=b",   ["RECEIVING","b"]) == 0.99
+    assert score("movement_prediction",    "b",                          "b")             == 0.99
 
 def test_dispatcher_returns_0_on_unknown_task():
-    assert score("unknown_task", "anything", "expected") == 0.0
+    assert score("unknown_task", "anything", "expected") == 0.01
 
 def test_dispatcher_never_raises_on_none_input():
-    assert score("object_location",        None, "yes") == 0.0
-    assert score("multi_constraint_query", None, ["x","y"]) == 0.0
-    assert score("movement_prediction",    None, "b") == 0.0
+    assert score("object_location",        None, "yes") == 0.01
+    assert score("multi_constraint_query", None, ["x","y"]) == 0.01
+    assert score("movement_prediction",    None, "b") == 0.01
 
 def test_dispatcher_never_raises_on_empty_answer():
-    assert score("object_location",        "", "yes") == 0.0
+    assert score("object_location",        "", "yes") == 0.01
 
 def test_dispatcher_never_raises_on_garbage_input():
-    assert score("object_location", "!@#$%", "yes") == 0.0
-    assert score("object_location", 12345,   "yes") == 0.0
+    assert score("object_location", "!@#$%", "yes") == 0.01
+    assert score("object_location", 12345,   "yes") == 0.01
 
 def test_reward_always_float_all_tasks():
     for task in ["object_location", "multi_constraint_query", "movement_prediction"]:
